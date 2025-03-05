@@ -9,6 +9,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -19,7 +20,11 @@ class Base(DeclarativeBase):
     pass
 
 db = SQLAlchemy(model_class=Base)
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///app.db")
+database_url = os.environ.get("DATABASE_URL")
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url or "sqlite:///app.db" #fallback to sqlite if DATABASE_URL is not set
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 300,
     "pool_pre_ping": True,
@@ -121,8 +126,16 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# Create database tables
+# Create database tables and upload directory
 with app.app_context():
-    db.create_all()
-    # Create uploads directory
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    try:
+        logger.info("Creating database tables...")
+        db.create_all()
+        logger.info("Database tables created successfully")
+
+        # Create uploads directory
+        logger.info("Creating uploads directory...")
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        logger.info("Uploads directory created successfully")
+    except Exception as e:
+        logger.error(f"Error during initialization: {str(e)}")
